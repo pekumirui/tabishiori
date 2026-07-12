@@ -23,7 +23,7 @@ const CATS = [
   { id: "other", label: "その他", icon: "📌", color: "#7A8699" },
 ];
 
-const STEPS = [5, 15, 30, 60];
+const STEPS = [1, 5, 15, 30, 60];
 
 const toYMD = (dt) => {
   const y = dt.getFullYear();
@@ -296,11 +296,10 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
   dayRef.current = day;
   const dayItems = trip.items[day] || [];
   const topItems = dayItems.filter((i) => !i.parentId);
-  const childrenOf = (id) =>
-    dayItems.filter((i) => i.parentId === id).sort((a, b) => a.time.localeCompare(b.time));
+  const childrenOf = (id) => dayItems.filter((i) => i.parentId === id); // 並び順は配列順(手動)
 
   // ---- ドラッグ: ハンドルを押したらwindowで追跡。要素が入れ替わっても途切れない ----
-  const startDrag = (e, id) => {
+  const startDrag = (e, id, parentId = null) => {
     e.preventDefault();
     e.stopPropagation();
     setDragId(id);
@@ -313,36 +312,44 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
       .slice()
       .sort((a, b) => a.time.localeCompare(b.time));
 
+    // 同じ階層(トップ同士/同じ親の子同士)の中で、指のY位置に応じて並べ替える
     const reorderByY = (y) => {
       setTrip((t) => {
         const d = dayRef.current;
         const list = t.items[d] || [];
-        const tops = list.filter((i) => !i.parentId);
-        const cur = tops.findIndex((i) => i.id === id); // ドラッグ中の現在位置
+        const sibs = parentId
+          ? list.filter((i) => i.parentId === parentId)
+          : list.filter((i) => !i.parentId);
+        const cur = sibs.findIndex((i) => i.id === id);
         if (cur < 0) return t;
 
-        // 指の位置がどの行の上にあるかを、各行の中点で判定
         let target = cur;
-        for (let i = 0; i < tops.length; i++) {
-          const el = rowRefs.current[tops[i].id];
+        for (let i = 0; i < sibs.length; i++) {
+          const el = rowRefs.current[sibs[i].id];
           if (!el) continue;
           const r = el.getBoundingClientRect();
-          const mid = r.top + r.height / 2;
-          if (y > mid) target = i; // 中点より下に指があれば、その行より後ろ
+          if (y > r.top + r.height / 2) target = i;
         }
-        // y が全行の中点より上なら先頭へ
-        const firstEl = rowRefs.current[tops[0]?.id];
+        const firstEl = rowRefs.current[sibs[0]?.id];
         if (firstEl) {
           const fr = firstEl.getBoundingClientRect();
           if (y < fr.top + fr.height / 2) target = 0;
         }
 
         if (target === cur) return t;
-        const arr = tops.slice();
+        const arr = sibs.slice();
         const [m] = arr.splice(cur, 1);
         arr.splice(target, 0, m);
-        const kids = list.filter((i) => i.parentId);
-        return { ...t, items: { ...t.items, [d]: [...arr, ...kids] } };
+
+        let newList;
+        if (parentId) {
+          // 兄弟の位置だけ新しい順序で差し替える(他の要素は元の位置のまま)
+          let k = 0;
+          newList = list.map((i) => (i.parentId === parentId ? arr[k++] : i));
+        } else {
+          newList = [...arr, ...list.filter((i) => i.parentId)];
+        }
+        return { ...t, items: { ...t.items, [d]: newList } };
       });
     };
 
@@ -359,7 +366,8 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
       setTrip((t) => {
         const d = dayRef.current;
         let next = t;
-        if (t.autoRecalc) {
+        // 時刻の自動詰め直しはトップレベルの並べ替え時のみ
+        if (!parentId && t.autoRecalc) {
           const recalculated = recalcTimes(t.items[d] || [], origTops);
           next = { ...t, items: { ...t.items, [d]: recalculated } };
         }
@@ -578,7 +586,18 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
                       {kids.map((k) => {
                         const kc = CATS.find((c) => c.id === k.cat) || CATS[5];
                         return (
-                          <div key={k.id} style={S.childRow}>
+                          <div
+                            key={k.id}
+                            ref={(el) => (rowRefs.current[k.id] = el)}
+                            style={{ ...S.childRow, ...(dragId === k.id ? { boxShadow: "0 4px 12px rgba(34,48,74,0.25)", opacity: 0.9 } : {}) }}
+                          >
+                            <span
+                              style={{ ...S.dragHandle, fontSize: 14, padding: "4px 6px", margin: "-4px 0 -4px -6px" }}
+                              onPointerDown={(e) => startDrag(e, k.id, item.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              ⠿
+                            </span>
                             <span style={{ fontSize: 13 }}>{kc.icon}</span>
                             {editId === k.id ? (
                               <TimeEditor />
