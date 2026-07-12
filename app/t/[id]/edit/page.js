@@ -20,7 +20,7 @@ export default function EditPage() {
       const key = urlKey || storedKey;
       if (urlKey && urlKey !== storedKey) localStorage.setItem(`editKey:${id}`, urlKey);
 
-      const res = await fetch(`/api/trips/${id}`);
+      const res = await fetch(`/api/trips/${id}`, { cache: "no-store" });
       if (!res.ok) {
         setState("notfound");
         return;
