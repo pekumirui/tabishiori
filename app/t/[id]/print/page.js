@@ -24,7 +24,7 @@ export default async function PrintPage({ params }) {
         const list = items[d] || [];
         const tops = list.filter((i) => !i.parentId);
         const childrenOf = (id) =>
-          list.filter((i) => i.parentId === id).sort((a, b) => a.time.localeCompare(b.time));
+          list.filter((i) => i.parentId === id); // エディタの手動並び順に合わせる
         return (
           <div key={d} className="print-day" style={{ maxWidth: 640, margin: "0 auto", padding: "36px 28px" }}>
             <p style={{ fontSize: 11, letterSpacing: "0.25em", color: "#B08A3E", margin: 0, fontWeight: 700 }}>旅のしおり</p>
