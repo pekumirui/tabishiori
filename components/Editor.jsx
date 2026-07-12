@@ -299,10 +299,44 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
   const childrenOf = (id) => dayItems.filter((i) => i.parentId === id); // 並び順は配列順(手動)
 
   // ---- ドラッグ: ハンドルを押したらwindowで追跡。要素が入れ替わっても途切れない ----
-  const startDrag = (e, id, parentId = null) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // ---- 長押しでドラッグ開始 ----
+  // カードのどこでも400ms長押しで並べ替えモードに入る。
+  // 長押し前に指が8px以上動いたら「スクロールしたいだけ」と判断して発動しない。
+  const pressRef = useRef(null);
+  const draggedRef = useRef(false); // ドラッグ直後のタップ(開閉)を無効化するため
+
+  const pressStart = (e, id, parentId = null) => {
+    // ボタンや入力欄の長押しでは発動させない
+    if (e.target.closest("button, input, select, a")) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const sx = e.clientX, sy = e.clientY;
+
+    const cancel = () => {
+      if (pressRef.current) clearTimeout(pressRef.current.timer);
+      pressRef.current = null;
+      window.removeEventListener("pointermove", onPreMove);
+      window.removeEventListener("pointerup", onPreUp);
+      window.removeEventListener("pointercancel", onPreUp);
+    };
+    const onPreMove = (ev) => {
+      if (Math.abs(ev.clientX - sx) > 8 || Math.abs(ev.clientY - sy) > 8) cancel();
+    };
+    const onPreUp = () => cancel();
+
+    window.addEventListener("pointermove", onPreMove);
+    window.addEventListener("pointerup", onPreUp);
+    window.addEventListener("pointercancel", onPreUp);
+    pressRef.current = {
+      timer: setTimeout(() => {
+        cancel();
+        beginSort(id, parentId);
+      }, 400),
+    };
+  };
+
+  const beginSort = (id, parentId) => {
     setDragId(id);
+    draggedRef.current = true;
     document.body.style.userSelect = "none";
 
     // 再計算用: ドラッグ開始時点の「時刻順スロット列」を記録(空きの並びの基準)
@@ -353,14 +387,14 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
       });
     };
 
-    const onMove = (ev) => {
-      ev.preventDefault();
-      reorderByY(ev.clientY);
-    };
+    // ドラッグ中は画面スクロールを止める(発動後に付けるので通常スクロールは阻害しない)
+    const blockScroll = (ev) => ev.preventDefault();
+    const onMove = (ev) => reorderByY(ev.clientY);
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("touchmove", blockScroll);
       document.body.style.userSelect = "";
       setDragId(null);
       setTrip((t) => {
@@ -375,7 +409,8 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
         return next;
       });
     };
-    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("touchmove", blockScroll, { passive: false });
+    window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
   };
@@ -522,19 +557,17 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
                   <span style={{ fontSize: 14 }}>{cat.icon}</span>
                 </div>
                 <div
-                  style={{ ...S.stopBody, cursor: kids.length ? "pointer" : "default", ...(isDragging ? { boxShadow: "0 6px 18px rgba(34,48,74,0.25)" } : {}) }}
-                  onClick={() =>
-                    setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }))
-                  }
+                  style={{ ...S.stopBody, cursor: kids.length ? "pointer" : "default", ...(isDragging ? { boxShadow: "0 6px 18px rgba(34,48,74,0.25)", transform: "scale(1.02)" } : {}) }}
+                  onPointerDown={(e) => pressStart(e, item.id)}
+                  onClick={() => {
+                    if (draggedRef.current) {
+                      draggedRef.current = false;
+                      return;
+                    }
+                    setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }));
+                  }}
                 >
                   <div style={S.stopHead}>
-                    <span
-                      style={S.dragHandle}
-                      onPointerDown={(e) => startDrag(e, item.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      ⠿
-                    </span>
                     {editId === item.id ? (
                       <TimeEditor />
                     ) : (
@@ -589,15 +622,13 @@ export default function Editor({ initialTrip, tripId, editKeyValue }) {
                           <div
                             key={k.id}
                             ref={(el) => (rowRefs.current[k.id] = el)}
-                            style={{ ...S.childRow, ...(dragId === k.id ? { boxShadow: "0 4px 12px rgba(34,48,74,0.25)", opacity: 0.9 } : {}) }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation(); // 親カードの長押しと二重発動しないように
+                              pressStart(e, k.id, item.id);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ ...S.childRow, ...(dragId === k.id ? { boxShadow: "0 4px 12px rgba(34,48,74,0.25)", opacity: 0.9, transform: "scale(1.02)" } : {}) }}
                           >
-                            <span
-                              style={{ ...S.dragHandle, fontSize: 14, padding: "4px 6px", margin: "-4px 0 -4px -6px" }}
-                              onPointerDown={(e) => startDrag(e, k.id, item.id)}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              ⠿
-                            </span>
                             <span style={{ fontSize: 13 }}>{kc.icon}</span>
                             {editId === k.id ? (
                               <TimeEditor />
@@ -1011,6 +1042,9 @@ const S = {
     WebkitUserSelect: "none",
   },
   stopBody: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+    WebkitTouchCallout: "none",
     background: C.card,
     borderRadius: 12,
     padding: "12px 14px",
@@ -1026,6 +1060,9 @@ const S = {
   memo: { margin: "4px 0 0", fontSize: 13, color: C.sub },
   groupToggle: { marginTop: 10, fontSize: 12, fontWeight: 700, color: C.indigo },
   childRow: {
+    WebkitUserSelect: "none",
+    userSelect: "none",
+    WebkitTouchCallout: "none",
     display: "flex",
     alignItems: "center",
     gap: 8,
