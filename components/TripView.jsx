@@ -16,7 +16,7 @@ export default function TripView({ trip }) {
         const list = items[d] || [];
         const tops = list.filter((i) => !i.parentId);
         const childrenOf = (id) =>
-          list.filter((i) => i.parentId === id).sort((a, b) => a.time.localeCompare(b.time));
+          list.filter((i) => i.parentId === id); // エディタの手動並び順に合わせる
         return (
           <section key={d} style={{ marginTop: 28 }}>
             <h2 style={{ fontSize: 16, display: "flex", gap: 10, alignItems: "baseline", borderBottom: `2px solid ${C.accent}`, paddingBottom: 6 }}>
