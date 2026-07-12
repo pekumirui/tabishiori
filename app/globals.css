@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif;
+  background: #F7F6F2;
+  color: #22304A;
+}
+a { color: inherit; }
+button { font-family: inherit; }
+input, select { font-family: inherit; }
+
+/* 印刷ページ用 */
+@media print {
+  .no-print { display: none !important; }
+  .print-day { page-break-after: always; }
+  .print-day:last-child { page-break-after: auto; }
+  body { background: #fff; }
+}
