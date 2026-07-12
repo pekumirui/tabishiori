@@ -1,6 +1,10 @@
 // GET /api/trips/:id : 旅程を取得(公開情報のみ)
 // PUT /api/trips/:id : 編集キーを検証して更新
 import { NextResponse } from "next/server";
+
+// GETの結果をキャッシュさせない(キャッシュされると古い空データが返り、編集内容が消える)
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 export async function GET(_req, { params }) {
